@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PackMath - ultralight pack weight auditor</title>
+<style>
+  :root { --bg:#0c1414; --card:#14201f; --line:#223332; --ink:#dfeceb; --dim:#8aa5a3; --acc:#4fd1c5; --warn:#f6b26b; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:32px 18px 64px; }
+  .wrap { max-width:1060px; margin:0 auto; }
+  h1 { font-size:26px; letter-spacing:.5px; }
+  h1 span { color:var(--acc); }
+  .home { float:right; color:var(--dim); text-decoration:none; font-size:13px; margin-top:8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin-top:20px; }
+  .card h2 { font-size:15px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:150px; }
+  label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+  input, select { width:100%; background:#0d1817; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:9px 10px; font:inherit; }
+  button { background:var(--acc); color:#06211e; border:0; border-radius:9px; padding:10px 20px; font:600 15px system-ui; cursor:pointer; }
+  button.ghost { background:#0d1817; color:var(--acc); border:1px solid var(--line); padding:8px 14px; font-size:13px; }
+  .err { color:#ff8a80; font-size:14px; margin-top:10px; min-height:20px; }
+  .note { color:var(--dim); font-size:12.5px; margin-top:10px; }
+  table { width:100%; border-collapse:collapse; margin-top:6px; font-size:14px; }
+  th { text-align:left; color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:.5px; padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:6px 10px; border-bottom:1px solid #1b2a29; vertical-align:middle; }
+  td input, td select { padding:6px 8px; font-size:14px; }
+  .del { background:none; border:0; color:var(--dim); cursor:pointer; font-size:16px; padding:4px 8px; }
+  .del:hover { color:#ff8a80; }
+  .verdict { background:#0f1d1b; border:1px solid #2a4a45; border-radius:12px; padding:18px 20px; margin-top:20px; font-size:16px; line-height:1.6; display:none; }
+  .verdict b { color:var(--acc); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .stat .v { font-size:22px; font-weight:700; }
+  .stat .k { color:var(--dim); font-size:12px; margin-top:4px; }
+  .bar-row { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:13.5px; }
+  .bar-row .lbl { width:90px; color:var(--dim); text-transform:capitalize; }
+  .bar { flex:1; height:14px; background:#0d1817; border-radius:7px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--acc); border-radius:7px; }
+  .bar-row .g { width:120px; text-align:right; }
+  .flag { background:#1d1710; border:1px solid #4a3a20; border-radius:10px; padding:10px 14px; margin-top:8px; font-size:13.5px; color:var(--warn); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="home" href="index.html">home</a>
+  <h1>Pack<span>Math</span></h1>
+
+  <div class="card">
+    <h2>You</h2>
+    <div class="row">
+      <div><label>Body weight (kg)</label><input id="body" type="number" value="75" min="30" max="200"></div>
+      <div><label>Water carried (litres)</label><input id="water" type="number" value="2" min="0" max="8" step="0.5"></div>
+    </div>
+    <div class="note">Water weighs 1 kg per litre and counts as consumable. Consumables and worn clothing leave your base weight but still ride on your back or shoulders.</div>
+  </div>
+
+  <div class="card">
+    <h2>Your gear</h2>
+    <table>
+      <thead><tr><th style="width:34%">Item</th><th>Grams</th><th>Class</th><th>Category</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="ghost" id="add">+ add item</button>
+      <button class="ghost" id="preset1">load weekend starter</button>
+      <button class="ghost" id="preset2">load UL thru-hiker</button>
+    </div>
+    <div style="margin-top:16px;"><button id="go">Audit my pack</button></div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+
+  <div class="stats hidden" id="statsWrap">
+    <div class="stat"><div class="v" id="sBase"></div><div class="k">base weight (carried, no consumables)</div></div>
+    <div class="stat"><div class="v" id="sTotal"></div><div class="k">total pack weight at trailhead</div></div>
+    <div class="stat"><div class="v" id="sSkin"></div><div class="k">skin-out weight (everything)</div></div>
+    <div class="stat"><div class="v" id="sPct"></div><div class="k">of your body weight</div></div>
+    <div class="stat"><div class="v" id="sBand"></div><div class="k">base-weight verdict</div></div>
+    <div class="stat"><div class="v" id="sItems"></div><div class="k">items on the list</div></div>
+  </div>
+
+  <div class="card hidden" id="catCard">
+    <h2>Where the grams live (carried only)</h2>
+    <div id="cats"></div>
+  </div>
+
+  <div class="card hidden" id="flagCard">
+    <h2>Over benchmark</h2>
+    <div id="flags"></div>
+  </div>
+
+  <div class="card">
+    <h2>What the numbers mean</h2>
+    <p style="font-size:14px; color:var(--ink);">
+      <b style="color:var(--acc)">Base weight</b> is everything in the pack except food, water and fuel - the part you can actually fix with gear choices.
+      Under 4.5 kg is <b style="color:var(--acc)">ultralight</b>, under 9 kg <b style="color:var(--acc)">lightweight</b>, under 13.6 kg <b style="color:var(--acc)">traditional</b>.
+      <b style="color:var(--acc)">Total pack weight</b> is what your back feels at the trailhead, consumables included.
+      The old rule of thumb says keep that under about 20% of your body weight; above 30% the walk stops being fun.
+      The fastest savings come from the big three - pack, shelter and sleep system - so anything over its category benchmark gets flagged.
+    </p>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  var tbody = document.getElementById('rows');
+  var CATS = PackMathEngine.CATEGORIES;
+
+  function addRow(it){
+    it = it || {};
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><input class="i-name" placeholder="e.g. Tent" value="' + (it.name || '') + '"></td>' +
+      '<td><input class="i-grams" type="number" min="1" style="width:90px" value="' + (it.grams || '') + '"></td>' +
+      '<td><select class="i-cls">' + ['carried','worn','consumable'].map(function(c){
+        return '<option' + (it.cls === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></td>' +
+      '<td><select class="i-cat">' + CATS.map(function(c){
+        return '<option' + (it.category === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></td>' +
+      '<td><button class="del" title="remove">x</button></td>';
+    tr.querySelector('.del').addEventListener('click', function(){ tr.remove(); });
+    tbody.appendChild(tr);
+  }
+
+  function loadPreset(list){ tbody.innerHTML = ''; list.forEach(addRow); }
+
+  document.getElementById('add').addEventListener('click', function(){ addRow(); });
+  document.getElementById('preset1').addEventListener('click', function(){
+    loadPreset([
+      { name:'65L pack', grams:1900, cls:'carried', category:'pack' },
+      { name:'2P tent', grams:2300, cls:'carried', category:'shelter' },
+      { name:'Sleeping bag', grams:1200, cls:'carried', category:'sleep' },
+      { name:'Foam pad', grams:400, cls:'carried', category:'sleep' },
+      { name:'Stove + pot', grams:450, cls:'carried', category:'cook' },
+      { name:'Rain jacket', grams:300, cls:'carried', category:'clothing' },
+      { name:'First aid', grams:350, cls:'carried', category:'safety' },
+      { name:'Headlamp', grams:90, cls:'carried', category:'other' },
+      { name:'Food, 2 days', grams:1600, cls:'consumable', category:'food' },
+      { name:'Hiking boots', grams:1100, cls:'worn', category:'clothing' }
+    ]);
+  });
+  document.getElementById('preset2').addEventListener('click', function(){
+    loadPreset([
+      { name:'Frameless 40L pack', grams:520, cls:'carried', category:'pack' },
+      { name:'Tarp + bivy', grams:650, cls:'carried', category:'shelter' },
+      { name:'Down quilt', grams:540, cls:'carried', category:'sleep' },
+      { name:'Inflatable pad', grams:370, cls:'carried', category:'sleep' },
+      { name:'Alcohol stove + ti pot', grams:150, cls:'carried', category:'cook' },
+      { name:'Wind shirt', grams:70, cls:'carried', category:'clothing' },
+      { name:'Repair + first aid', grams:220, cls:'carried', category:'safety' },
+      { name:'Food, 4 days', grams:2800, cls:'consumable', category:'food' },
+      { name:'Trail runners', grams:560, cls:'worn', category:'clothing' }
+    ]);
+  });
+
+  function collect(){
+    var rows = tbody.querySelectorAll('tr');
+    var items = [];
+    for (var i = 0; i < rows.length; i++){
+      var name = rows[i].querySelector('.i-name').value.trim();
+      var grams = rows[i].querySelector('.i-grams').value;
+      if (!name && !grams) continue;
+      items.push({
+        name: name,
+        grams: Number(grams),
+        cls: rows[i].querySelector('.i-cls').value,
+        category: rows[i].querySelector('.i-cat').value
+      });
+    }
+    return {
+      bodyKg: document.getElementById('body').value,
+      waterL: document.getElementById('water').value,
+      items: items
+    };
+  }
+
+  document.getElementById('go').addEventListener('click', function(){
+    var errEl = document.getElementById('err'); errEl.textContent = '';
+    var r;
+    try { r = PackMathEngine.analyze(collect()); } catch(e){ errEl.textContent = e.message; return; }
+    var kg = function(g){ return (g/1000).toFixed(2) + ' kg'; };
+    document.getElementById('sBase').textContent = kg(r.baseG);
+    document.getElementById('sTotal').textContent = kg(r.totalPackG);
+    document.getElementById('sSkin').textContent = kg(r.skinOutG);
+    document.getElementById('sPct').textContent = r.pctBody + '%';
+    document.getElementById('sBand').textContent = r.baseVerdict;
+    document.getElementById('sItems').textContent = r.itemCount;
+    document.getElementById('statsWrap').classList.remove('hidden');
+
+    var v = document.getElementById('verdict');
+    v.innerHTML = r.verdict
+      .replace(/(ultralight|lightweight|traditional|heavy|easy carry|manageable|working hard|too heavy)/g, '<b>$1</b>');
+    v.style.display = 'block';
+
+    var cats = document.getElementById('cats');
+    cats.innerHTML = '';
+    r.categories.forEach(function(c){
+      var div = document.createElement('div');
+      div.className = 'bar-row';
+      div.innerHTML = '<div class="lbl">' + c.category + '</div>' +
+        '<div class="bar"><i style="width:' + Math.round(c.bar * 100) + '%"></i></div>' +
+        '<div class="g">' + c.grams + ' g - ' + c.pct + '%</div>';
+      cats.appendChild(div);
+    });
+    document.getElementById('catCard').classList.remove('hidden');
+
+    var flags = document.getElementById('flags');
+    flags.innerHTML = '';
+    if (r.overBenchmark.length){
+      r.overBenchmark.forEach(function(f){
+        var div = document.createElement('div');
+        div.className = 'flag';
+        div.textContent = f.name + ' - ' + f.grams + ' g (' + f.overBy + ' g over the ' + f.category + ' benchmark of ' + f.benchmark + ' g)';
+        flags.appendChild(div);
+      });
+      document.getElementById('flagCard').classList.remove('hidden');
+    } else {
+      document.getElementById('flagCard').classList.add('hidden');
+    }
+  });
+
+  loadPreset([
+    { name:'Tent', grams:1400, cls:'carried', category:'shelter' },
+    { name:'Pack', grams:850, cls:'carried', category:'pack' },
+    { name:'Quilt', grams:600, cls:'carried', category:'sleep' }
+  ]);
+})();
+</script>
+</body>
+</html>
